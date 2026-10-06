@@ -39,7 +39,14 @@ namespace Fogline.Tests
                 {
                     if (method is MethodInfo info) Check(info.ReturnType, $"{method.Name} return");
                     foreach (var p in method.GetParameters()) Check(p.ParameterType, $"{method.Name} param {p.Name}");
-                    foreach (var t in BodyReferences(method)) Check(t, $"{method.Name} body");
+                    var body = method.GetMethodBody();
+                    if (body != null)
+                        foreach (var local in body.LocalVariables) Check(local.LocalType, $"{method.Name} local");
+                    foreach (var r in BodyReferences(method))
+                    {
+                        if (r.Unresolved != null) hits.Add($"{type.FullName}: {method.Name} body -> {r.Unresolved}");
+                        else Check(r.Type, $"{method.Name} body");
+                    }
                 }
             }
             return hits;
@@ -52,11 +59,23 @@ namespace Fogline.Tests
             if (t.HasElementType) return Refers(t.GetElementType(), isForbidden);
             if (t.IsGenericType && t.GetGenericArguments().Any(a => Refers(a, isForbidden))) return true;
             for (var b = t; b != null; b = b.BaseType)
+            {
                 if (isForbidden(b)) return true;
+                // 构造后的泛型（如 Foo<int>）的 FullName 带参数，需要再按泛型定义判断
+                if (b.IsGenericType && !b.IsGenericTypeDefinition && isForbidden(b.GetGenericTypeDefinition())) return true;
+            }
             return false;
         }
 
-        private static IEnumerable<Type> BodyReferences(MethodBase method)
+        // IL 里引用的类型；解析失败时 Unresolved 非空，由调用方记为命中，不能静默放过
+        private readonly struct BodyRef
+        {
+            public readonly Type Type;
+            public readonly string Unresolved;
+            public BodyRef(Type type, string unresolved) { Type = type; Unresolved = unresolved; }
+        }
+
+        private static IEnumerable<BodyRef> BodyReferences(MethodBase method)
         {
             var il = method.GetMethodBody()?.GetILAsByteArray();
             if (il == null) yield break;
@@ -84,20 +103,37 @@ namespace Fogline.Tests
                     case OperandType.InlineMethod:
                     case OperandType.InlineTok:
                     case OperandType.InlineType:
-                        var member = Resolve(method.Module, BitConverter.ToInt32(il, i), typeArgs, methodArgs);
+                        int token = BitConverter.ToInt32(il, i);
                         i += 4;
-                        if (member is Type t) yield return t;
-                        else if (member != null) yield return member.DeclaringType;
+                        MemberInfo member = null;
+                        string failure = null;
+                        try { member = method.Module.ResolveMember(token, typeArgs, methodArgs); }
+                        catch (Exception e) { failure = $"unresolved token 0x{token:X8} ({e.GetType().Name})"; }
+                        if (failure != null) { yield return new BodyRef(null, failure); break; }
+                        if (member == null) { yield return new BodyRef(null, $"unresolved token 0x{token:X8} (null)"); break; }
+                        foreach (var r in Referenced(member)) yield return new BodyRef(r, null);
                         break;
                     default: i += 4; break; // InlineBrTarget、InlineI、InlineSig、InlineString、ShortInlineR
                 }
             }
         }
 
-        private static MemberInfo Resolve(Module module, int token, Type[] typeArgs, Type[] methodArgs)
+        // 一个成员引用涉及的所有类型：声明类型、字段类型、返回/参数类型、泛型实参
+        private static IEnumerable<Type> Referenced(MemberInfo member)
         {
-            try { return module.ResolveMember(token, typeArgs, methodArgs); }
-            catch (Exception) { return null; }
+            if (member is Type t) { yield return t; yield break; }
+            if (member.DeclaringType != null) yield return member.DeclaringType;
+            if (member is FieldInfo f) yield return f.FieldType;
+            if (member is MethodBase mb)
+            {
+                if (mb is MethodInfo mi)
+                {
+                    yield return mi.ReturnType;
+                    if (mi.IsGenericMethod)
+                        foreach (var a in mi.GetGenericArguments()) yield return a;
+                }
+                foreach (var p in mb.GetParameters()) yield return p.ParameterType;
+            }
         }
     }
 }
