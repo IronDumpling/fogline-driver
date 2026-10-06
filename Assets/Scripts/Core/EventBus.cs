@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 namespace Fogline.Core
 {
 
@@ -41,11 +43,30 @@ namespace Fogline.Core
 
         public void Emit<T>(T evt)
         {
-    #if UNITY_EDITOR
-            UnityEngine.Debug.Log($"[EventBus] {typeof(T).Name} {UnityEngine.JsonUtility.ToJson(evt)}");
-    #endif
+            Log(typeof(T), evt);
             if (_handlers.TryGetValue(typeof(T), out var handler))
                 ((Action<T>)handler)?.Invoke(evt);
+        }
+
+        // 静态类型未知时发布（例如 SimRunner 转发的模拟事件）：按运行时类型分发，订阅方照常用 On<具体类型>
+        public void EmitBoxed(object evt)
+        {
+            if (evt == null) throw new ArgumentNullException(nameof(evt));
+            var type = evt.GetType();
+            Log(type, evt);
+            if (!_handlers.TryGetValue(type, out var handler)) return;
+            try { handler.DynamicInvoke(evt); }
+            catch (TargetInvocationException e) when (e.InnerException != null)
+            {
+                ExceptionDispatchInfo.Capture(e.InnerException).Throw();
+            }
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        private static void Log(Type type, object evt)
+        {
+            if (Attribute.IsDefined(type, typeof(SilentEventAttribute), false)) return;
+            UnityEngine.Debug.Log($"[EventBus] {type.Name} {UnityEngine.JsonUtility.ToJson(evt)}");
         }
 
         internal void Off<T>(Action<T> handler)
