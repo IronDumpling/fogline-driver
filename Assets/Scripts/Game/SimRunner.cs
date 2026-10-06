@@ -16,28 +16,45 @@ namespace Fogline.Game
         public float         Alpha     => _stepper?.Alpha ?? 0f;
         public SnapshotStore Snapshots { get; } = new();
 
-        private readonly CommandLog _log = new();
+        private CommandLog _log = new();
         private SimStepper _stepper;
 
         public void Begin(SimWorld world)
         {
+            WriteLog();   // 上一局的日志先落盘，避免两局混在一起
+            _log = new CommandLog();
             _stepper = new SimStepper(world, SimStepper.DefaultStepSeconds, _log);
             _stepper.EventRaised += evt => EventBus.Instance.EmitBoxed(evt);
         }
 
         public void Enqueue(ISimCommand command)
         {
-            if (_stepper == null) throw new InvalidOperationException("SimRunner 还没有 Begin");
+            RequireBegun();
             _stepper.Enqueue(command);
         }
 
-        public void SaveSnapshot() => Snapshots.Save(World);
+        public void SaveSnapshot()
+        {
+            RequireBegun();
+            Snapshots.Save(World);
+        }
 
-        public void RestoreSnapshot() => _stepper.Replace(Snapshots.Restore());
+        public void RestoreSnapshot()
+        {
+            RequireBegun();
+            _stepper.Replace(Snapshots.Restore());
+        }
+
+        private void RequireBegun()
+        {
+            if (_stepper == null) throw new InvalidOperationException("SimRunner 还没有 Begin");
+        }
 
         private void Update() => _stepper?.Advance(Time.deltaTime);
 
-        private void OnDestroy()
+        private void OnDestroy() => WriteLog();
+
+        private void WriteLog()
         {
             if (_log.Lines.Count == 0) return;
             var file = $"{DateTime.Now:yyyyMMdd-HHmmss}.jsonl";

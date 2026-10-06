@@ -87,6 +87,35 @@ namespace Fogline.Tests
             Assert.AreEqual(TestWorlds.Digest(stepper.World), TestWorlds.Digest(replayed));
         }
 
+        [Test]
+        public void LoggedCommands_ReplayAcrossSnapshotRestores()
+        {
+            var log = new CommandLog();
+            var stepper = new SimStepper(TestWorlds.Create(42), Step, log);
+            var store = new SnapshotStore();
+            var script = new SeededRandom(9);
+            void Play(int frames)
+            {
+                for (int frame = 0; frame < frames; frame++)
+                {
+                    if (script.NextFloat() < 0.3f) stepper.Enqueue(new ShiftController(script.Range(-1, 2)));
+                    stepper.Advance(script.NextFloat() * 0.1f);
+                }
+            }
+
+            Play(60);
+            store.Save(stepper.World);
+            Play(80);
+            stepper.Replace(store.Restore());
+            Play(70);
+            stepper.Replace(store.Restore());
+            Play(50);
+
+            var replayed = Replay(CommandLog.Parse(log.Lines), stepper.World.Clock.Step, 42);
+
+            Assert.AreEqual(TestWorlds.Digest(stepper.World), TestWorlds.Digest(replayed));
+        }
+
         private static SimWorld Replay(List<(long Step, ISimCommand Command)> log, long steps, ulong seed)
         {
             var world = TestWorlds.Create(seed);

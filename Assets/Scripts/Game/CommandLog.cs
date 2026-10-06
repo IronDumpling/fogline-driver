@@ -8,6 +8,8 @@ namespace Fogline.Game
 
     /// <summary>
     /// 试玩日志：按步记录玩家指令，每行一条 JSON（步号、指令类型、指令字段），可原样回放。
+    /// 世界被替换（恢复快照）时记一条 "#restore" 标记，步号为恢复后世界的步数。
+    /// Parse 返回的是“有效时间线”：遇到标记就丢弃之前所有步号 >= 标记步号的指令，多次恢复按顺序依次生效。
     /// </summary>
     public sealed class CommandLog
     {
@@ -19,6 +21,8 @@ namespace Fogline.Game
             public string Json;
         }
 
+        private const string RestoreType = "#restore";
+
         private readonly List<string> _lines = new();
         public IReadOnlyList<string> Lines => _lines;
 
@@ -29,6 +33,9 @@ namespace Fogline.Game
                 Type = command.GetType().FullName,
                 Json = JsonUtility.ToJson(command),
             }));
+
+        public void RecordRestore(long step) =>
+            _lines.Add(JsonUtility.ToJson(new Line { Step = step, Type = RestoreType, Json = "" }));
 
         public void WriteTo(string path)
         {
@@ -43,11 +50,21 @@ namespace Fogline.Game
             foreach (var raw in lines)
             {
                 if (string.IsNullOrWhiteSpace(raw)) continue;
-                var line = JsonUtility.FromJson<Line>(raw);
-                var type = typeof(ISimCommand).Assembly.GetType(line.Type);
-                if (type == null || !typeof(ISimCommand).IsAssignableFrom(type))
+                Line line;
+                try { line = JsonUtility.FromJson<Line>(raw); }
+                catch (ArgumentException e) { throw new FormatException($"日志行不是合法 JSON：{raw}", e); }
+
+                if (line.Type == RestoreType)
+                {
+                    result.RemoveAll(entry => entry.Item1 >= line.Step);
+                    continue;
+                }
+
+                var type = string.IsNullOrEmpty(line.Type) ? null : typeof(ISimCommand).Assembly.GetType(line.Type);
+                if (type == null || type.IsAbstract || !typeof(ISimCommand).IsAssignableFrom(type))
                     throw new FormatException($"不是已知的指令类型：{line.Type}");
-                result.Add((line.Step, (ISimCommand)JsonUtility.FromJson(line.Json, type)));
+                try { result.Add((line.Step, (ISimCommand)JsonUtility.FromJson(line.Json, type))); }
+                catch (ArgumentException e) { throw new FormatException($"指令字段不是合法 JSON：{raw}", e); }
             }
             return result;
         }

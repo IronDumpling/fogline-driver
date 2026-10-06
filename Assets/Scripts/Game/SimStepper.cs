@@ -37,7 +37,9 @@ namespace Fogline.Game
         /// <summary>换成另一个世界（例如恢复快照），清空未应用的指令和累积时间。</summary>
         public void Replace(SimWorld world)
         {
-            World = world ?? throw new ArgumentNullException(nameof(world));
+            if (world == null) throw new ArgumentNullException(nameof(world));
+            _log?.RecordRestore(world.Clock.Step);   // 时间线回退，日志里留标记
+            World = world;
             _pending.Clear();
             _accumulator = 0f;
         }

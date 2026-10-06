@@ -20,6 +20,27 @@ namespace Fogline.Tests
         }
 
         [Test]
+        public void Parse_RestoreMarkerDropsAbandonedTimeline()
+        {
+            var log = new CommandLog();
+            log.Record(1, new ShiftController(1));
+            log.Record(5, new ShiftController(1));
+            log.Record(9, new ShiftController(1));
+            log.RecordRestore(5);
+            log.Record(6, new ShiftController(1));
+            var parsed = CommandLog.Parse(log.Lines);
+            Assert.AreEqual(2, parsed.Count);
+            Assert.AreEqual(1, parsed[0].Step);
+            Assert.AreEqual(6, parsed[1].Step);
+        }
+
+        [Test]
+        public void Parse_MalformedJsonThrowsFormatException()
+        {
+            Assert.Throws<FormatException>(() => CommandLog.Parse(new[] { "not json {" }));
+        }
+
+        [Test]
         public void Parse_SkipsBlankLines()
         {
             var log = new CommandLog();
