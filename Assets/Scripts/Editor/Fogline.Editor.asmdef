@@ -1,0 +1,14 @@
+{
+    "name": "Fogline.Editor",
+    "rootNamespace": "Fogline.EditorTools",
+    "references": ["Fogline.Core", "Fogline.Sim", "Fogline.Game", "Fogline.View"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
