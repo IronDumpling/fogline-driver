@@ -13,6 +13,17 @@ namespace Fogline.Game
     /// </summary>
     public sealed class CommandLog
     {
+        /// <summary>日志头：回放需要的起始条件，让日志自描述。</summary>
+        [Serializable]
+        public sealed class RunHeader
+        {
+            public string Scenario;
+            public ulong  RandomState;
+            public long   StartStep;
+            public double StartSeconds;
+            public float  StepSeconds;
+        }
+
         [Serializable]
         private struct Line
         {
@@ -22,6 +33,7 @@ namespace Fogline.Game
         }
 
         private const string RestoreType = "#restore";
+        private const string HeaderType  = "#header";
 
         private readonly List<string> _lines = new();
         public IReadOnlyList<string> Lines => _lines;
@@ -33,6 +45,36 @@ namespace Fogline.Game
                 Type = command.GetType().FullName,
                 Json = JsonUtility.ToJson(command),
             }));
+
+        /// <summary>记录起始条件（场景、随机状态、起始步数/时间、步长）。</summary>
+        public void RecordHeader(SimWorld world, float stepSeconds)
+        {
+            var header = new RunHeader
+            {
+                Scenario     = world.Scenario.name,
+                RandomState  = world.Random.State,
+                StartStep    = world.Clock.Step,
+                StartSeconds = world.Clock.Seconds,
+                StepSeconds  = stepSeconds,
+            };
+            _lines.Add(JsonUtility.ToJson(new Line { Step = world.Clock.Step, Type = HeaderType, Json = JsonUtility.ToJson(header) }));
+        }
+
+        /// <summary>返回第一个日志头，没有则返回 null。</summary>
+        public static RunHeader ParseHeader(IEnumerable<string> lines)
+        {
+            foreach (var raw in lines)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                Line line;
+                try { line = JsonUtility.FromJson<Line>(raw); }
+                catch (ArgumentException e) { throw new FormatException($"日志行不是合法 JSON：{raw}", e); }
+                if (line.Type != HeaderType) continue;
+                try { return JsonUtility.FromJson<RunHeader>(line.Json); }
+                catch (ArgumentException e) { throw new FormatException($"日志头不是合法 JSON：{raw}", e); }
+            }
+            return null;
+        }
 
         public void RecordRestore(long step) =>
             _lines.Add(JsonUtility.ToJson(new Line { Step = step, Type = RestoreType, Json = "" }));
@@ -53,6 +95,8 @@ namespace Fogline.Game
                 Line line;
                 try { line = JsonUtility.FromJson<Line>(raw); }
                 catch (ArgumentException e) { throw new FormatException($"日志行不是合法 JSON：{raw}", e); }
+
+                if (line.Type == HeaderType) continue;   // 头部不是指令
 
                 if (line.Type == RestoreType)
                 {

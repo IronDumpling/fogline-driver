@@ -35,6 +35,35 @@ namespace Fogline.Tests
         }
 
         [Test]
+        public void Header_RoundTripsAllFieldsAndParseIgnoresIt()
+        {
+            var world = TestWorlds.Create(1);
+            world.Random.State = 18446744073709551557UL;   // 远大于 2^53，检验 ulong 不丢精度
+            world.Tick(0.05f, null);
+            var log = new CommandLog();
+            log.RecordHeader(world, 0.05f);
+            log.Record(1, new ShiftController(1));
+
+            var header = CommandLog.ParseHeader(log.Lines);
+
+            Assert.IsNotNull(header);
+            Assert.AreEqual(world.Scenario.name, header.Scenario);
+            Assert.AreEqual(18446744073709551557UL, header.RandomState);
+            Assert.AreEqual(world.Clock.Step, header.StartStep);
+            Assert.AreEqual(world.Clock.Seconds, header.StartSeconds);
+            Assert.AreEqual(0.05f, header.StepSeconds);
+            Assert.AreEqual(1, CommandLog.Parse(log.Lines).Count);
+        }
+
+        [Test]
+        public void ParseHeader_NoHeaderReturnsNull()
+        {
+            var log = new CommandLog();
+            log.Record(1, new ShiftController(1));
+            Assert.IsNull(CommandLog.ParseHeader(log.Lines));
+        }
+
+        [Test]
         public void Parse_MalformedJsonThrowsFormatException()
         {
             Assert.Throws<FormatException>(() => CommandLog.Parse(new[] { "not json {" }));

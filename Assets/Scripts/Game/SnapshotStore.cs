@@ -16,6 +16,9 @@ namespace Fogline.Game
         public void Save(SimWorld world) =>
             _saved = (world ?? throw new ArgumentNullException(nameof(world))).Clone();
 
+        /// <summary>清掉已存的快照（新一局开始时用）。</summary>
+        public void Clear() => _saved = null;
+
         public SimWorld Restore() =>
             _saved?.Clone() ?? throw new InvalidOperationException("还没有快照");
     }

@@ -15,6 +15,9 @@ namespace Fogline.Tests
             "UnityEngine.Random",
             "UnityEngine.SceneManagement.SceneManager",
             "Fogline.Core.EventBus",
+            "System.Random",                    // 非确定性来源，Sim 只能用 SeededRandom
+            "System.DateTime",
+            "System.Diagnostics.Stopwatch",
         };
 
         private static bool IsForbidden(Type t) =>
@@ -29,6 +32,8 @@ namespace Fogline.Tests
         private class UsesLocalOnly { public int Count() { var arr = new UnityEngine.GameObject[0]; return arr.Length; } }
         private class UsesTypeof { public Type Get() => typeof(UnityEngine.Time); }
         private class UsesRandom { public float Roll() => UnityEngine.Random.value; }
+        private class UsesSystemRandom { public int Roll() => new System.Random().Next(); }
+        private class UsesDateTimeNow { public long Now() => System.DateTime.Now.Ticks; }
         private class UsesEventBus { public object Get() => Fogline.Core.EventBus.Instance; }
         private class CleanMath { public float Length(UnityEngine.Vector2 v) => v.magnitude; }
 
@@ -39,6 +44,8 @@ namespace Fogline.Tests
         [TestCase(typeof(UsesLocalOnly))]
         [TestCase(typeof(UsesTypeof))]
         [TestCase(typeof(UsesRandom))]
+        [TestCase(typeof(UsesSystemRandom))]
+        [TestCase(typeof(UsesDateTimeNow))]
         [TestCase(typeof(UsesEventBus))]
         public void Scanner_FlagsForbiddenUsages(Type fixture)
         {

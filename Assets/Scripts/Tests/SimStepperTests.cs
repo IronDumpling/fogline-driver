@@ -82,7 +82,7 @@ namespace Fogline.Tests
                 stepper.Advance(script.NextFloat() * 0.1f);
             }
 
-            var replayed = Replay(CommandLog.Parse(log.Lines), stepper.World.Clock.Step, 42);
+            var replayed = Replay(log, stepper.World.Clock.Step);
 
             Assert.AreEqual(TestWorlds.Digest(stepper.World), TestWorlds.Digest(replayed));
         }
@@ -111,14 +111,20 @@ namespace Fogline.Tests
             stepper.Replace(store.Restore());
             Play(50);
 
-            var replayed = Replay(CommandLog.Parse(log.Lines), stepper.World.Clock.Step, 42);
+            var replayed = Replay(log, stepper.World.Clock.Step);
 
             Assert.AreEqual(TestWorlds.Digest(stepper.World), TestWorlds.Digest(replayed));
         }
 
-        private static SimWorld Replay(List<(long Step, ISimCommand Command)> log, long steps, ulong seed)
+        // 只靠日志（含头部）重建起始世界再回放
+        private static SimWorld Replay(CommandLog source, long steps)
         {
-            var world = TestWorlds.Create(seed);
+            var header = CommandLog.ParseHeader(source.Lines);
+            Assert.IsNotNull(header, "日志缺少头部");
+            Assert.AreEqual(SimStepper.DefaultStepSeconds, header.StepSeconds);
+            var world = TestWorlds.Create(777);   // 种子故意与实际不同，状态由头部覆盖
+            world.Random.State = header.RandomState;
+            var log = CommandLog.Parse(source.Lines);
             int next = 0;
             for (long s = 0; s < steps; s++)
             {

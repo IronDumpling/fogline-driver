@@ -46,6 +46,19 @@ namespace Fogline.Tests
         }
 
         [Test]
+        public void Clear_DropsSnapshot()
+        {
+            var store = new SnapshotStore();
+            store.Save(TestWorlds.Create());
+            Assert.IsTrue(store.HasSnapshot);
+
+            store.Clear();
+
+            Assert.IsFalse(store.HasSnapshot);
+            Assert.Throws<InvalidOperationException>(() => store.Restore());
+        }
+
+        [Test]
         public void Save_NullThrows()
         {
             Assert.Throws<ArgumentNullException>(() => new SnapshotStore().Save(null));

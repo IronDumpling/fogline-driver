@@ -29,6 +29,7 @@ namespace Fogline.Game
             World       = world ?? throw new ArgumentNullException(nameof(world));
             StepSeconds = stepSeconds;
             _log        = log;
+            _log?.RecordHeader(world, stepSeconds);   // 日志第一行写起始条件，保证可回放
         }
 
         public void Enqueue(ISimCommand command) =>
@@ -65,7 +66,12 @@ namespace Fogline.Game
             var commands = _pending.Count == 0 ? Array.Empty<ISimCommand>() : _pending.ToArray();
             _pending.Clear();
             foreach (var command in commands) _log?.Record(World.Clock.Step, command);
-            foreach (var evt in World.Tick(StepSeconds, commands)) EventRaised?.Invoke(evt);
+            var world = World;
+            foreach (var evt in world.Tick(StepSeconds, commands))
+            {
+                if (!ReferenceEquals(World, world)) break;   // 处理器里 Replace 了世界，后面的事件属于被放弃的时间线
+                EventRaised?.Invoke(evt);
+            }
         }
     }
 }
