@@ -3,6 +3,7 @@
     "rootNamespace": "Fogline.Tests",
     "references": [
         "Fogline.Core",
+        "Fogline.Sim",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
