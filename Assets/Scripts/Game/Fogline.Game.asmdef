@@ -1,0 +1,14 @@
+{
+    "name": "Fogline.Game",
+    "rootNamespace": "Fogline.Game",
+    "references": ["Fogline.Core", "Fogline.Sim"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

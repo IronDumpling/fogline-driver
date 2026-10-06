@@ -4,6 +4,7 @@
     "references": [
         "Fogline.Core",
         "Fogline.Sim",
+        "Fogline.Game",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
